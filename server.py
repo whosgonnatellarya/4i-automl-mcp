@@ -62,3 +62,20 @@ def train_model_tool(task_type: str, X_json: str, y_json: str):
     joblib.dump(best_model, "best_model.pkl")
     return json.dumps({ "best_model": type(best_model).__name__, "best_score": best_score})
 
+
+@app.tool()
+def predict_tool(new_data_json: str):
+    """
+    Predict using the trained model on new data.
+
+    Args:
+        new_data_json (str): The JSON representation of the new feature data.
+
+    Returns:
+        str: The JSON representation of the predictions.
+    """
+
+    best_model = joblib.load("best_model.pkl")
+    new_data = pd.read_json(new_data_json)
+    predictions = best_model.predict(new_data)
+    return json.dumps({"predictions": predictions.tolist()})
