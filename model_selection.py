@@ -28,7 +28,6 @@ def select_model(task_type, X, y):
     for name, model in models.items():
         scores = cross_val_score(model, X, y, cv=5, scoring=scoring)
         mean_score = np.mean(scores)
-
         if mean_score > best_score:
             best_score = mean_score
             best_model = model
