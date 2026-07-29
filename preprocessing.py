@@ -13,6 +13,10 @@ def preprocess_data(csv_path, target_column):
         else:
             X[col] = X[col].fillna(X[col].mode()[0])
 
+    for col in X.columns:
+        if X[col].nunique() > 50:
+         X = X.drop(columns=[col])
+
     X_encoded = pd.get_dummies(X, drop_first=True, dtype=int)
 
     scaler = StandardScaler()
