@@ -5,6 +5,8 @@ from preprocessing import preprocess_data
 import json
 from model_selection import select_model
 import pandas as pd
+import joblib
+ 
 
 app = FastMCP()
 @app.tool()
@@ -49,3 +51,14 @@ def select_model_tool(task_type: str, X_json: str, y_json: str):
 
     best_model, best_score = select_model(task_type, X, y)
     return json.dumps({"best_model": type(best_model).__name__, "best_score": best_score})
+
+
+@app.tool()
+def train_model_tool(task_type: str, X_json: str, y_json: str):
+    best_model, best_score = select_model(task_type, X_json, y_json)
+    X = pd.read_json(X_json)
+    y = pd.read_json(y_json)
+    best_model.fit(X, y)
+    joblib.dump(best_model, "best_model.pkl")
+    return json.dumps({ "best_model": type(best_model).__name__, "best_score": best_score})
+
