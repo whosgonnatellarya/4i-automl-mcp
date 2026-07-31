@@ -79,3 +79,19 @@ def predict_tool(new_data_json: str):
     new_data = pd.read_json(new_data_json)
     predictions = best_model.predict(new_data)
     return json.dumps({"predictions": predictions.tolist()})
+
+
+@app.tool()
+def auto_ml_pipeline_tool(csv_path: str, target_column: str):
+
+    task_type = determine_task_type(csv_path, target_column)
+    X_scaled, y = preprocess_data(csv_path, target_column)
+    best_model, best_score = select_model(task_type, X_scaled, y)
+    best_model.fit(X_scaled, y)
+    joblib.dump(best_model, "best_model.pkl")
+    
+    return json.dumps({
+        "task_type": task_type,
+        "best_model": type(best_model).__name__,
+        "best_score": best_score
+    })
