@@ -1,97 +1,187 @@
-import mcp
-from main import determine_task_type
-from mcp.server.fastmcp import FastMCP
-from preprocessing import preprocess_data
 import json
-from model_selection import select_model
-import pandas as pd
+
 import joblib
- 
+import pandas as pd
+from mcp.server.fastmcp import FastMCP
+
+from explainability import build_explanation, get_top_features
+from main import determine_task_type
+from model_selection import select_model
+from preprocessing import preprocess_data
 
 app = FastMCP()
+
+
 @app.tool()
 def determine_task_type_tool(target: str, column_data: str) -> str:
     """
-    Determine the task type (classification or regression) based on the target CSV file and specified column data.
+    Determine whether a column is a classification or regression target.
 
     Args:
-        target (str): The path to the target CSV file.
-        column_data (str): The name of the column to analyze.
+        target (str): Path to the CSV file.
+        column_data (str): Name of the target column.
 
     Returns:
-        str: The determined task type ("classification", "regression", or "unknown or unsupported column data type").
+        str: "classification", "regression", or "unknown or unsupported column data type".
     """
     return determine_task_type(target, column_data)
 
+
 @app.tool()
-def preprocess_data_tool(csv_path: str, target_column: str):
+def preprocess_data_tool(csv_path: str, target_column: str) -> str:
     """
-    Preprocess the data from a CSV file by handling missing values, encoding categorical variables, and scaling numerical features.
+    Preprocess CSV data: smart missing-value imputation, encoding, scaling.
+    Returns feature matrix X, target y, and a per-column missing-value report.
 
     Args:
-        csv_path (str): The path to the CSV file.
-        target_column (str): The name of the target column.
-    """
-    X_scaled, y = preprocess_data(csv_path, target_column)
-    return json.dumps({"X": X_scaled.to_json(), "y": y.to_json()})
-
-@app.tool()
-def select_model_tool(task_type: str, X_json: str, y_json: str):
-    """
-    Select the best model based on the task type (classification or regression) and the provided data.
-
-    Args:
-        task_type (str): The type of task ("classification" or "regression").
-        X_json (str): The JSON representation of the feature data.
-        y_json (str): The JSON representation of the target data.
-        """
-
-    X = pd.read_json(X_json)
-    y = pd.read_json(y_json)
-
-    best_model, best_score = select_model(task_type, X, y)
-    return json.dumps({"best_model": type(best_model).__name__, "best_score": best_score})
-
-
-@app.tool()
-def train_model_tool(task_type: str, X_json: str, y_json: str):
-    best_model, best_score = select_model(task_type, X_json, y_json)
-    X = pd.read_json(X_json)
-    y = pd.read_json(y_json)
-    best_model.fit(X, y)
-    joblib.dump(best_model, "best_model.pkl")
-    return json.dumps({ "best_model": type(best_model).__name__, "best_score": best_score})
-
-
-@app.tool()
-def predict_tool(new_data_json: str):
-    """
-    Predict using the trained model on new data.
-
-    Args:
-        new_data_json (str): The JSON representation of the new feature data.
+        csv_path (str): Path to the CSV file.
+        target_column (str): Name of the target column.
 
     Returns:
-        str: The JSON representation of the predictions.
+        str: JSON with keys "X", "y", and "missing_value_report".
     """
+    X_scaled, y, mv_report = preprocess_data(csv_path, target_column)
+    return json.dumps({
+        "X": X_scaled.to_json(),
+        "y": y.to_json(),
+        "missing_value_report": mv_report,
+    })
 
-    best_model = joblib.load("best_model.pkl")
+
+@app.tool()
+def select_model_tool(task_type: str, X_json: str, y_json: str) -> str:
+    """
+    Run cross-validation across all candidate models, tune the winner with
+    RandomizedSearchCV, and return the result with overfitting diagnostics.
+
+    Args:
+        task_type (str): "classification" or "regression".
+        X_json (str): JSON representation of the feature matrix.
+        y_json (str): JSON representation of the target series.
+
+    Returns:
+        str: JSON with best_model, cv_score, train_score, overfitting_risk, all_scores.
+    """
+    X = pd.read_json(X_json)
+    y = pd.read_json(y_json, typ="series")
+    result = select_model(task_type, X, y)
+    return json.dumps({
+        "best_model": result["model_name"],
+        "cv_score": result["cv_score"],
+        "train_score": result["train_score"],
+        "cv_score_final": result["cv_score_final"],
+        "overfitting_risk": result["overfitting_risk"],
+        "all_scores": result["all_scores"],
+    })
+
+
+@app.tool()
+def train_model_tool(task_type: str, X_json: str, y_json: str) -> str:
+    """
+    Train and persist the best model found by select_model.
+
+    Args:
+        task_type (str): "classification" or "regression".
+        X_json (str): JSON feature matrix.
+        y_json (str): JSON target series.
+
+    Returns:
+        str: JSON with best_model name, cv_score, train_score, overfitting_risk.
+    """
+    X = pd.read_json(X_json)
+    y = pd.read_json(y_json, typ="series")
+    result = select_model(task_type, X, y)
+    joblib.dump(result["model"], "best_model.pkl")
+    return json.dumps({
+        "best_model": result["model_name"],
+        "cv_score": result["cv_score"],
+        "train_score": result["train_score"],
+        "overfitting_risk": result["overfitting_risk"],
+    })
+
+
+@app.tool()
+def predict_tool(new_data_json: str) -> str:
+    """
+    Run predictions using the persisted model (best_model.pkl).
+
+    Args:
+        new_data_json (str): JSON feature matrix for inference.
+
+    Returns:
+        str: JSON with a "predictions" list.
+    """
+    model = joblib.load("best_model.pkl")
     new_data = pd.read_json(new_data_json)
-    predictions = best_model.predict(new_data)
+    predictions = model.predict(new_data)
     return json.dumps({"predictions": predictions.tolist()})
 
 
 @app.tool()
-def auto_ml_pipeline_tool(csv_path: str, target_column: str):
+def explain_model_tool(csv_path: str, target_column: str) -> str:
+    """
+    Run the full AutoML pipeline and return a natural-language explanation of
+    why the best model was chosen, including SHAP-derived top features.
 
+    Args:
+        csv_path (str): Path to the CSV file.
+        target_column (str): Name of the target column.
+
+    Returns:
+        str: Human-readable explanation of model selection and feature importance.
+    """
     task_type = determine_task_type(csv_path, target_column)
-    X_scaled, y = preprocess_data(csv_path, target_column)
-    best_model, best_score = select_model(task_type, X_scaled, y)
-    best_model.fit(X_scaled, y)
-    joblib.dump(best_model, "best_model.pkl")
-    
+    X_scaled, y, _ = preprocess_data(csv_path, target_column)
+    result = select_model(task_type, X_scaled, y)
+
+    top_features = get_top_features(result["model"], X_scaled, n=3)
+    explanation = build_explanation(
+        model_name=result["model_name"],
+        all_scores=result["all_scores"],
+        top_features=top_features,
+        cv_score=result["cv_score_final"],
+        task_type=task_type,
+    )
+    return explanation
+
+
+@app.tool()
+def auto_ml_pipeline_tool(csv_path: str, target_column: str) -> str:
+    """
+    Run the complete enhanced AutoML pipeline end-to-end:
+    preprocessing → model selection → hyperparameter tuning →
+    overfitting detection → SHAP explainability.
+
+    Args:
+        csv_path (str): Path to the CSV file.
+        target_column (str): Name of the target column.
+
+    Returns:
+        str: JSON with task_type, best_model, cv_score, train_score,
+             overfitting_risk, top_features, explanation, and missing_value_report.
+    """
+    task_type = determine_task_type(csv_path, target_column)
+    X_scaled, y, mv_report = preprocess_data(csv_path, target_column)
+    result = select_model(task_type, X_scaled, y)
+
+    joblib.dump(result["model"], "best_model.pkl")
+
+    top_features = get_top_features(result["model"], X_scaled, n=3)
+    explanation = build_explanation(
+        model_name=result["model_name"],
+        all_scores=result["all_scores"],
+        top_features=top_features,
+        cv_score=result["cv_score_final"],
+        task_type=task_type,
+    )
+
     return json.dumps({
         "task_type": task_type,
-        "best_model": type(best_model).__name__,
-        "best_score": best_score
+        "best_model": result["model_name"],
+        "cv_score": round(result["cv_score_final"], 4),
+        "train_score": round(result["train_score"], 4),
+        "overfitting_risk": result["overfitting_risk"],
+        "top_features": top_features,
+        "explanation": explanation,
+        "missing_value_report": mv_report,
     })
