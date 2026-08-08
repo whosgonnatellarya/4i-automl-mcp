@@ -95,10 +95,15 @@ def select_model(task_type, X, y):
     # Step 2 — tune the winner with RandomizedSearchCV
     param_grid = PARAM_GRIDS.get(best_model_name, {})
     if param_grid:
+        # cap n_iter to actual grid size to avoid sklearn warning
+        grid_size = 1
+        for v in param_grid.values():
+            grid_size *= len(v)
+        n_iter = min(10, grid_size)
         search = RandomizedSearchCV(
             best_model,
             param_grid,
-            n_iter=10,
+            n_iter=n_iter,
             cv=5,
             scoring=scoring,
             random_state=42,
