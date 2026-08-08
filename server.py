@@ -92,6 +92,8 @@ def train_model_tool(task_type: str, X_json: str, y_json: str) -> str:
     y = pd.read_json(y_json, typ="series")
     result = select_model(task_type, X, y)
     joblib.dump(result["model"], "best_model.pkl")
+    if result.get("label_encoder"):
+        joblib.dump(result["label_encoder"], "label_encoder.pkl")
     return json.dumps({
         "best_model": result["model_name"],
         "cv_score": result["cv_score"],
@@ -111,9 +113,13 @@ def predict_tool(new_data_json: str) -> str:
     Returns:
         str: JSON with a "predictions" list.
     """
+    import os
     model = joblib.load("best_model.pkl")
     new_data = pd.read_json(new_data_json)
     predictions = model.predict(new_data)
+    if os.path.exists("label_encoder.pkl"):
+        le = joblib.load("label_encoder.pkl")
+        predictions = le.inverse_transform(predictions.astype(int))
     return json.dumps({"predictions": predictions.tolist()})
 
 
@@ -135,14 +141,13 @@ def explain_model_tool(csv_path: str, target_column: str) -> str:
     result = select_model(task_type, X_scaled, y)
 
     top_features = get_top_features(result["model"], X_scaled, n=3)
-    explanation = build_explanation(
+    return build_explanation(
         model_name=result["model_name"],
         all_scores=result["all_scores"],
         top_features=top_features,
         cv_score=result["cv_score_final"],
         task_type=task_type,
     )
-    return explanation
 
 
 @app.tool()
@@ -165,6 +170,8 @@ def auto_ml_pipeline_tool(csv_path: str, target_column: str) -> str:
     result = select_model(task_type, X_scaled, y)
 
     joblib.dump(result["model"], "best_model.pkl")
+    if result.get("label_encoder"):
+        joblib.dump(result["label_encoder"], "label_encoder.pkl")
 
     top_features = get_top_features(result["model"], X_scaled, n=3)
     explanation = build_explanation(

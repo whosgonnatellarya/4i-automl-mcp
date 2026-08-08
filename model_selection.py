@@ -1,9 +1,11 @@
 import numpy as np
+import pandas as pd
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.model_selection import cross_val_score, RandomizedSearchCV
 from sklearn.metrics import r2_score
+from sklearn.preprocessing import LabelEncoder
 from xgboost import XGBClassifier, XGBRegressor
 from lightgbm import LGBMClassifier, LGBMRegressor
 
@@ -66,6 +68,12 @@ def _get_models(task_type):
 
 
 def select_model(task_type, X, y):
+    # XGBoost and LightGBM require integer class labels for classification
+    label_encoder = None
+    if task_type == "classification" and not pd.api.types.is_numeric_dtype(y):
+        label_encoder = LabelEncoder()
+        y = pd.Series(label_encoder.fit_transform(y), index=y.index, name=y.name)
+
     models = _get_models(task_type)
     scoring = "accuracy" if task_type == "classification" else "neg_mean_squared_error"
 
@@ -121,4 +129,6 @@ def select_model(task_type, X, y):
         "cv_score_final": cv_score_final,
         "overfitting_risk": overfitting_risk,
         "all_scores": all_scores,
+        "label_encoder": label_encoder,
+        "label_classes": label_encoder.classes_.tolist() if label_encoder else None,
     }
