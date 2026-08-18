@@ -1,6 +1,6 @@
 # automl-mcp
 
-an autonomous machine learning pipeline exposed as an mcp server. feed in a csv and a target column — the system handles everything else.
+an autonomous machine learning pipeline exposed as an mcp server. feed in a csv and a target column - the system handles everything else.
 
 ## what it does
 
@@ -14,13 +14,13 @@ an autonomous machine learning pipeline exposed as an mcp server. feed in a csv 
 
 ## tools
 
-- `determine_task_type_tool` — detects classification or regression from a csv column
-- `preprocess_data_tool` — cleans and prepares the data for training with smart imputation
-- `select_model_tool` — tunes and picks the best model via cross-validation
-- `train_model_tool` — trains the best model and saves it
-- `predict_tool` — loads the trained model and returns predictions
-- `explain_model_tool` — generates shap feature importance and a natural language explanation
-- `auto_ml_pipeline_tool` — runs the full pipeline end to end in one call
+- `determine_task_type_tool` - detects classification or regression from a csv column
+- `preprocess_data_tool` - cleans and prepares the data for training with smart imputation
+- `select_model_tool` - tunes and picks the best model via cross-validation
+- `train_model_tool` - trains the best model and saves it
+- `predict_tool` - loads the trained model and returns predictions
+- `explain_model_tool` - generates shap feature importance and a natural language explanation
+- `auto_ml_pipeline_tool` - runs the full pipeline end to end in one call
 
 ## setup
 
