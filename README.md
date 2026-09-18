@@ -1,6 +1,6 @@
 # automl-mcp
 
-an autonomous machine learning pipeline exposed as an mcp server. feed in a csv and a target column - the system handles everything else.
+an autonomous machine learning pipeline exposed as an mcp server. feed in a csv and a target column, the system computes the rest!
 
 ## what it does
 
